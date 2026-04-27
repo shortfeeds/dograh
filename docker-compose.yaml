@@ -10,7 +10,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # Removed host port mapping to avoid conflicts
     expose:
       - "5432"
     volumes:
@@ -25,7 +24,6 @@ services:
 
   redis:
     image: redis:7
-    # Removed host port mapping to solve "port is already allocated" error
     expose:
       - "6379"
     command: >
@@ -48,9 +46,10 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
       MINIO_API_CORS_ALLOW_ORIGIN: "*"
-    ports:
-      - "127.0.0.1:9000:9000" 
-      - "127.0.0.1:9001:9001"
+    # REMOVED port 9000 host binding to fix the allocation error
+    expose:
+      - "9000"
+      - "9001"
     volumes:
       - minio-data:/data
     healthcheck:
@@ -102,7 +101,7 @@ services:
       POSTHOG_API_KEY: "phc_ItizB1dP6yv7ZYobbcqrpxTdbomDA8hJFSEmAMdYvIr"
       POSTHOG_HOST: "https://us.i.posthog.com"
     ports:
-      - "8002:8000"
+      - "8001:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -155,7 +154,6 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared-tunnel
     command: tunnel --no-autoupdate --url http://api:8000 --metrics 0.0.0.0:2000
-    # Metrics port changed to 2001 to avoid potential conflicts with Coolify system services
     ports:
       - "2001:2000" 
     networks:
