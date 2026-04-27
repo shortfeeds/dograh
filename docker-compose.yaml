@@ -46,7 +46,6 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
       MINIO_API_CORS_ALLOW_ORIGIN: "*"
-    # REMOVED port 9000 host binding to fix the allocation error
     expose:
       - "9000"
       - "9001"
@@ -100,8 +99,9 @@ services:
       ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-true}"
       POSTHOG_API_KEY: "phc_ItizB1dP6yv7ZYobbcqrpxTdbomDA8hJFSEmAMdYvIr"
       POSTHOG_HOST: "https://us.i.posthog.com"
-    ports:
-      - "8001:8000"
+    # REMOVED port 8001 host binding to fix allocation crash. API is now securely internal.
+    expose:
+      - "8000"
     depends_on:
       postgres:
         condition: service_healthy
