@@ -1,147 +1,47 @@
 services:
-  postgres:
-    image: pgvector/pgvector:pg17
+  dograh-api:
+    image: ghcr.io/dograh-hq/api:latest
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    expose:
-      - "5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
-
-  redis:
-    image: redis:7
-    expose:
-      - "6379"
-    command: ["redis-server", "--requirepass", "redissecret"]
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "redissecret", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
-
-  minio:
-    image: minio/minio
-    container_name: minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      MINIO_API_CORS_ALLOW_ORIGIN: "*"
-    expose:
-      - "9000"
-      - "9001"
-    volumes:
-      - minio-data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
-
-  api:
-    image: ${REGISTRY:-dograhai}/dograh-api:latest
-    volumes:
-      - shared-tmp:/tmp
-    environment:
-      ENVIRONMENT: "local"
-      LOG_LEVEL: "INFO"
-      BACKEND_API_ENDPOINT: "${BACKEND_API_ENDPOINT:-http://localhost:8000}"
-      DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/postgres"
-      REDIS_URL: "redis://:redissecret@redis:6379"
-      ENABLE_AWS_S3: "false"
-      MINIO_ENDPOINT: "minio:9000"
-      MINIO_PUBLIC_ENDPOINT: "${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}"
-      MINIO_ACCESS_KEY: "minioadmin"
-      MINIO_SECRET_KEY: "minioadmin"
-      MINIO_BUCKET: "voice-audio"
-      MINIO_SECURE: "false"
-      FASTAPI_WORKERS: 1
-      ENABLE_TRACING: "false"
-      TURN_HOST: "${TURN_HOST:-}"
-      TURN_SECRET: "${TURN_SECRET:-}"
-      OSS_JWT_SECRET: "${OSS_JWT_SECRET:-ChangeMeInProduction}"
-      ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-true}"
-      POSTHOG_API_KEY: "phc_ItizB1dP6yv7ZYobbcqrpxTdbomDA8hJFSEmAMdYvIr"
-      POSTHOG_HOST: "https://us.i.posthog.com"
-    expose:
-      - "8000"
+      DATABASE_URL: postgresql://dograh:CHANGE_ME_DB_PASS@dograh-postgres:5432/dograh
+      REDIS_URL: redis://dograh-redis:6379
+      # Telephony & AI Keys
+      PLIVO_AUTH_ID: ${PLIVO_AUTH_ID}
+      PLIVO_AUTH_TOKEN: ${PLIVO_AUTH_TOKEN}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
+      SARVAM_API_KEY: ${SARVAM_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: llama-3.3-70b-versatile
+      DEEPGRAM_MODEL: nova-3
+      SARVAM_TTS_MODEL: bulbul-v3
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health').read()\""]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    networks:
-      - app-network
+      - dograh-postgres
+      - dograh-redis
 
-  ui:
-    image: ${REGISTRY:-dograhai}/dograh-ui:latest
+  dograh-ui:
+    image: ghcr.io/dograh-hq/ui:latest
+    restart: unless-stopped
     environment:
-      BACKEND_URL: "http://api:8000"
-      NODE_ENV: "oss"
-      ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-true}"
-      POSTHOG_KEY: "phc_ItizB1dP6yv7ZYobbcqrpxTdbomDA8hJFSEmAMdYvIr"
-      POSTHOG_HOST: "https://us.posthog.com"
-    # Port 3010 removed from host to avoid conflict. 
-    # Coolify uses its own internal proxy to route your domain to this container.
-    expose:
-      - "3010"
+      NEXT_PUBLIC_API_URL: http://dograh-api:8000
     depends_on:
-      api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3010 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - app-network
+      - dograh-api
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared-tunnel
-    command: tunnel --no-autoupdate --url http://api:8000 --metrics 0.0.0.0:2000
-    # Metrics port moved to high range to avoid any possible system conflict
-    ports:
-      - "12000:2000" 
-    networks:
-      - app-network
+  dograh-postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dograh
+      POSTGRES_PASSWORD: CHANGE_ME_DB_PASS
+      POSTGRES_DB: dograh
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  dograh-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
 
 volumes:
-  postgres_data:
-  redis_data:
-  minio-data:
-    driver: local
-  shared-tmp:
-    driver: local
-
-networks:
-  app-network:
-    driver: bridge
+  pgdata:
+  redisdata:
